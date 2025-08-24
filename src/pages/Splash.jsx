@@ -4,28 +4,28 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
-const SplashScreen = () => {
-  return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.safeContainer}>
-      
-        <ImageBackground
-          source={require('../assets/images/splash-bg.jpg')}
-          style={styles.backgroundImage}
-          resizeMode="cover"
-        >
-          <View style={styles.layout}>
-            <Image
-              source={require('../assets/images/wevois_payment_logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </View>
-        </ImageBackground>
-      </SafeAreaView>
-    </SafeAreaProvider>
-  );
-};
+/**
+ * SplashScreen component displays the app splash with background and logo.
+ */
+const SplashScreen = () => (
+  <SafeAreaProvider>
+    <SafeAreaView style={styles.safeContainer}>
+      <ImageBackground
+        source={require('../assets/images/splash-bg.jpg')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      >
+        <View style={styles.layout}>
+          <Image
+            source={require('../assets/images/company_logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
+      </ImageBackground>
+    </SafeAreaView>
+  </SafeAreaProvider>
+);
 
 export default SplashScreen;
 
@@ -35,19 +35,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'black',
   },
   backgroundImage: {
-    width: width,
-    height: height,
+    width,
+    height,
     justifyContent: 'center',
     alignItems: 'center',
   },
   layout: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: '30%',
   },
-  logo: {
-    width: 150,
-    height: 180,
-    marginBottom: 50,
-  },
+logo: {
+    width: 115,
+    height: 115,
+    marginBottom: 40,
+  }
 });

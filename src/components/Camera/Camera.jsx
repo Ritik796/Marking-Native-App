@@ -18,102 +18,87 @@ const CameraComponent = ({
   setIsVisible,
   setLoader,
   loader,
-  webData,
   locationRef
 }) => {
   const cameraRef = useRef(null);
+  const lastSent = useRef(0);
+
   const [cameraOpen, setCameraOpen] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
   const [isLayoutReady, setIsLayoutReady] = useState(false);
   const [cameraData, setCameraData] = useState({ photoUri: "", resizedUri: "" });
+
   const device = useCameraDevice('back');
-  const lastSent = useRef(0);
+
+  // Manage location tracking when camera modal opens/closes
   useEffect(() => {
     const manageLocationTracking = async () => {
       if (isVisible) {
-        console.log('Pausing location tracking (async)');
         await webAction.stopTracking(locationRef);
-        setTimeout(() => {
-          setCameraOpen(true);
-        }, 500);
+        setTimeout(() => setCameraOpen(true), 500);
       }
-
     };
 
     manageLocationTracking();
 
     return async () => {
-      console.log('Cleanup: resuming location tracking');
-      await webAction.startLocationTracking(webData.userId, webData.city, locationRef);
+      await webAction.startLocationTracking(locationRef, webViewRef);
       setCameraOpen(false);
     };
-  }, [isVisible]);
+  }, [isVisible, locationRef, webViewRef]);
+
+  // Delete a file if it exists
   const deleteFile = async (filePath) => {
     try {
       const exists = await RNFS.exists(filePath);
-      if (exists) {
-        await RNFS.unlink(filePath);
-      }
+      if (exists) await RNFS.unlink(filePath);
     } catch (error) {
-      console.log('Failed to delete file:', error);
+      // console.log('Failed to delete file:', error);
     }
   };
-  const captureImage = useCallback(async () => {
-    if (cameraRef.current) {
-      setLoader(true);
-      try {
-        const photo = await cameraRef.current.takePhoto({ qualityPrioritization: 'balanced' });
-        const resizedImage = await ImageResizer.createResizedImage(
-          photo.path,
-          800,
-          800,
-          'JPEG',
-          100,
-          0
-        );
-        const base64Data = await RNFS.readFile(resizedImage.uri, 'base64');
-        const formattedBase64 = `data:image/jpeg;base64,${base64Data}`;
-        setCameraData(pre => ({ ...pre, photoUri: photo.path, resizedUri: resizedImage.uri }));
-        setBase64Image(formattedBase64);
-        setCameraOpen(false);
-        setShowPreview(true);
 
-      } catch (err) {
-        console.error('Error capturing or resizing image:', err);
-      }
-      setLoader(false);
+  // Capture and resize image, then set preview
+  const captureImage = useCallback(async () => {
+    if (!cameraRef.current) return;
+    setLoader(true);
+    try {
+      const photo = await cameraRef.current.takePhoto({ qualityPrioritization: 'balanced' });
+      const resizedImage = await ImageResizer.createResizedImage(
+        photo.path, 800, 800, 'JPEG', 100, 0
+      );
+      const base64Data = await RNFS.readFile(resizedImage.uri, 'base64');
+      const formattedBase64 = `data:image/jpeg;base64,${base64Data}`;
+      setCameraData({ photoUri: photo.path, resizedUri: resizedImage.uri });
+      setBase64Image(formattedBase64);
+      setCameraOpen(false);
+      setShowPreview(true);
+    } catch (err) {
+      // console.error('Error capturing or resizing image:', err);
     }
+    setLoader(false);
   }, [setBase64Image, setLoader]);
 
- const confirmPhoto = async () => {
-  setLoader(true);
-  try {
-    const now = Date.now();
-    if (base64Image && now - lastSent.current > 3000) {
-      lastSent.current = now;
-      const messageData = { image: base64Image };
-      webViewRef.current?.postMessage(JSON.stringify(messageData));
+  // Confirm photo, send to WebView, clean up files
+  const confirmPhoto = async () => {
+    setLoader(true);
+    try {
+      const now = Date.now();
+      if (base64Image && now - lastSent.current > 3000) {
+        lastSent.current = now;
+        webViewRef.current?.postMessage(JSON.stringify({ image: base64Image }));
+      }
+      if (cameraData.photoUri) await deleteFile(cameraData.photoUri);
+      if (cameraData.resizedUri) await deleteFile(cameraData.resizedUri);
+      setBase64Image(null);
+      setCameraData({ photoUri: null, resizedUri: null });
+    } catch (error) {
+      // console.log('Error during photo confirmation or cleanup:', error);
     }
-    // Clean up local files if cameraData exists
-    if (cameraData?.photoUri) {
-      await deleteFile(cameraData.photoUri);
-    }
-    if (cameraData?.resizedUri) {
-      await deleteFile(cameraData.resizedUri);
-    }
+    setLoader(false);
+    handleClose();
+  };
 
-    // Clear stored image data
-    setBase64Image(null);
-    setCameraData({ photoUri: null, resizedUri: null });
-  } catch (error) {
-    console.log('Error during photo confirmation or cleanup:', error);
-  }
-
-  setLoader(false);
-  handleClose();
-};
-
-
+  // Close camera modal and reset preview
   const handleClose = () => {
     setCameraOpen(false);
     setShowPreview(false);

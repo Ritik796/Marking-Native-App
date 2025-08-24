@@ -1,243 +1,285 @@
-import { PermissionsAndroid, Platform } from "react-native";
+/**
+ * @author Ritik Parmar
+ * Utility functions for permissions, location tracking, WebView messaging, and cache management.
+ */
+
+import { BackHandler, PermissionsAndroid, Platform } from "react-native";
 import Geolocation from "@react-native-community/geolocation";
 import DeviceInfo from "react-native-device-info";
-import * as service from "../../Services/locationService";
+import * as RNFS from 'react-native-fs';
 
+/**
+ * Requests necessary permissions for Android devices.
+ * @returns {Promise<boolean>} True if all permissions are granted, false otherwise.
+ */
 export const requestPermissions = async () => {
-  try {
-    if (Platform.OS !== "android") return true; // iOS handled differently
+  if (Platform.OS !== "android") return true; // iOS handled differently
 
-    let isPermission = true;
-    const granted = await PermissionsAndroid.requestMultiple([
+  try {
+    const permissions = [
       PermissionsAndroid.PERMISSIONS.CAMERA,
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
       PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
       PermissionsAndroid.PERMISSIONS.ACCESS_MEDIA_LOCATION,
-    ]);
+    ];
 
-    if (
-      granted[PermissionsAndroid.PERMISSIONS.CAMERA] !==
-      PermissionsAndroid.RESULTS.GRANTED
-    ) {
-      console.log("Camera permission denied");
-      isPermission = false;
-    }
+    const granted = await PermissionsAndroid.requestMultiple(permissions);
 
-    if (
-      granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] !==
-      PermissionsAndroid.RESULTS.GRANTED
-    ) {
-      console.log("Location permission denied");
-      isPermission = false;
-    }
-    if (
-      granted[PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE] !==
-      PermissionsAndroid.RESULTS.GRANTED
-    ) {
-      console.log("READ_EXTERNAL_STORAGE permission denied");
-      isPermission = false;
-    }
-    if (
-      granted[PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES] !==
-      PermissionsAndroid.RESULTS.GRANTED
-    ) {
-      console.log("READ_MEDIA_IMAGES permission denied");
-      isPermission = false;
-    }
-    if (
-      granted[PermissionsAndroid.PERMISSIONS.ACCESS_MEDIA_LOCATION] !==
-      PermissionsAndroid.RESULTS.GRANTED
-    ) {
-      console.log("ACCESS_MEDIA_LOCATION permission denied");
-      isPermission = false;
-    }
+    // Helper to check and log denied permissions
+    const checkPermission = (perm, name) => {
+      if (granted[perm] !== PermissionsAndroid.RESULTS.GRANTED) {
+        console.log(`${name} permission denied`);
+        return false;
+      }
+      return true;
+    };
 
-    return isPermission;
+    const allGranted = [
+      checkPermission(PermissionsAndroid.PERMISSIONS.CAMERA, "Camera"),
+      checkPermission(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, "Location"),
+      checkPermission(PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE, "Read External Storage"),
+      checkPermission(PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES, "Read Media Images"),
+      checkPermission(PermissionsAndroid.PERMISSIONS.ACCESS_MEDIA_LOCATION, "Access Media Location"),
+    ].every(Boolean);
+
+    return allGranted;
   } catch (err) {
     console.warn("Permission error:", err);
     return false;
   }
 };
 
-
-// export const startLocationTracking = async (userId, city, locationRef) => {
-//   if (!userId || !city) {
-//     console.warn("Invalid userId or city");
-//     return () => {};
-//   }
-
-//   const isLocationOn = await DeviceInfo.isLocationEnabled().catch((err) => {
-//     console.error("Error checking GPS status:", err);
-//     return false;
-//   });
-
-//   if (!isLocationOn) {
-//     console.warn("Device location is OFF. Saving blank.");
-//     service.updateLocationByUserId(userId, city, "", "");
-//     return () => {};
-//   }
-
-//   console.log("📡 Starting location tracking...");
-//   let previousTime = null; // No time initially → first update happens
-
-//   const watchId = Geolocation.watchPosition(
-//     (position) => {
-//       const { latitude, longitude, accuracy } = position.coords;
-//       const currentTime = Date.now(); // Current time in ms
-
-//       console.log("📍 GPS:", latitude, longitude, "Accuracy:", accuracy);
-
-//       if (accuracy <= 15) {
-//         if (!previousTime) {
-//           // First update
-//           console.log("✅ First location → saving immediately");
-//           service.updateLocationByUserId(userId, city, latitude, longitude);
-//           previousTime = currentTime;
-//         } else {
-//           const secondsPassed = Math.floor((currentTime - previousTime) / 1000);
-//           console.log("⏱️ Seconds since last update:", secondsPassed);
-
-//           if (secondsPassed >= 8) {
-//             console.log("✅ 8+ seconds passed → saving location");
-//             service.updateLocationByUserId(userId, city, latitude, longitude);
-//             previousTime = currentTime;
-//           } else {
-//             console.log("⏳ Less than 5s → Skipping update");
-//           }
-//         }
-//       } else {
-//         console.log("⚠️ Low accuracy (" + accuracy + "m) → Skipping update");
-//       }
-//     },
-//     (error) => {
-//       console.error("❌ Geolocation error:", error);
-//       service.updateLocationByUserId(userId, city, "", "");
-//     },
-//     {
-//       enableHighAccuracy: true,
-//       distanceFilter: 10,
-//       interval: 10000,
-//       fastestInterval: 6000,
-//       maximumAge: 0,
-//       useSignificantChanges: false,
-//     }
-//   );
-
-//   locationRef.current = watchId;
-
-//   return () => {
-//     if (locationRef.current != null) {
-//       console.log("🛑 Stopping location tracking...");
-//       Geolocation.clearWatch(locationRef.current);
-//       locationRef.current = null;
-//     }
-//   };
-// };
-export const startLocationTracking = async (userId, city, locationRef) => {
-  if (!userId || !city) {
-    console.warn("Invalid userId or city");
-    return () => { };
-  }
-
-  console.log("Checking if device location is enabled…");
+/**
+ * Starts location tracking if device location is enabled.
+ * Posts location updates to WebView.
+ * @param {Object} locationRef - Ref object to store watchId.
+ * @param {Object} webViewRef - Ref to the WebView component.
+ * @returns {Function} Cleanup function to stop tracking.
+ */
+export const startLocationTracking = async (locationRef, webViewRef) => {
   const isLocationOn = await DeviceInfo.isLocationEnabled().catch((err) => {
     console.error("Error checking GPS status:", err);
     return false;
   });
 
   if (!isLocationOn) {
-    console.warn("Device location (GPS) is OFF. Recording blank location.");
-    service.updateLocationByUserId(userId, city, "", "");
-    return () => { };
+    webViewRef.current?.postMessage(JSON.stringify({ type: "Location_Disabled" }));
+    return;
   }
-  console.log("Starting watchPosition…");
+  console.log("Starting location tracking...");
   const watchId = Geolocation.watchPosition(
     (position) => {
       const { latitude, longitude, accuracy } = position.coords;
-      console.log("watchPosition callback:", latitude, longitude, accuracy);
-
       if (accuracy != null && accuracy <= 15) {
-        service.updateLocationByUserId(userId, city, latitude, longitude);
-      } else {
-        console.log("Skipped low-accuracy position:", accuracy);
+        webViewRef?.current?.postMessage(JSON.stringify({
+          type: "location_update",
+          location: { lat: latitude, lng: longitude }
+        }));
       }
     },
     (error) => {
-      service.updateLocationByUserId(userId, city, "", "");
+      // Optionally handle geolocation errors here
     },
     {
       enableHighAccuracy: true,
-      distanceFilter: 10,          // Trigger every ~10 meter
-      interval: 10000,            // Regular update every 10s
-      fastestInterval: 6000,      // Minimum interval for updates
+      distanceFilter: 10,      // Trigger every ~10 meter
+      interval: 10000,         // Regular update every 10s
+      fastestInterval: 6000,   // Minimum interval for updates
       useSignificantChanges: false,
-      maximumAge: 0
+      maximumAge: 0,
     }
-
   );
 
   locationRef.current = watchId;
-  console.log("watchId stored:", watchId);
 
+  // Cleanup function to stop tracking
   return () => {
     if (locationRef.current != null) {
-      console.log("Clearing watchPosition with id:", locationRef.current);
       Geolocation.clearWatch(locationRef.current);
       locationRef.current = null;
     }
   };
-}
-
-export const stopLocationTracking = (locationRef, setWebData) => {
-  if (locationRef?.current) {
-    console.log("Location tracking stopped.", locationRef.current);
-    Geolocation.clearWatch(locationRef.current);
-    locationRef.current = null;
-
-    if (setWebData) {
-      setWebData((prev) => ({ ...prev, userId: "", city: "" }));
-    }
-  }
 };
 
+/**
+ * Stops location tracking.
+ * @param {Object} locationRef - Ref object containing watchId.
+ */
 export const stopTracking = async (locationRef) => {
   if (locationRef?.current) {
-    console.log("Location tracking stopped.", locationRef.current);
     await Geolocation.clearWatch(locationRef.current);
     locationRef.current = null;
   }
 };
 
+/**
+ * Gets the current location and posts it to the webViewRef.
+ * @param {Object} webViewRef - Ref to the WebView component.
+ * @returns {Promise<string>} "success" or "fail"
+ */
 export const getCurrentLocationLatlng = (webViewRef) => {
   return new Promise((resolve) => {
     try {
-      Geolocation.getCurrentPosition((pos) => {
-        let { latitude, longitude, accuracy } = pos.coords;
-        webViewRef?.current?.postMessage(JSON.stringify({ type: "current_Location", currentLocation: { lat: latitude, lng: longitude } }));
-        resolve('success');
-
-      }, (error) => {
-        console.log(error);
-        if (error.code === 1) {
-          webViewRef?.current?.postMessage(JSON.stringify({ type: "Location_off" }));
-          resolve('fail');
+      Geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          webViewRef?.current?.postMessage(
+            JSON.stringify({
+              type: "current_Location",
+              currentLocation: { lat: latitude, lng: longitude },
+            })
+          );
+          resolve("success");
+        },
+        (error) => {
+          console.log(error);
+          let type = "Position_error";
+          if (error.code === 1) type = "Location_off";
+          webViewRef?.current?.postMessage(JSON.stringify({ type }));
+          resolve("fail");
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 5000,
         }
-        else if (error.code === 2) {
-          webViewRef?.current?.postMessage(JSON.stringify({ type: "Position_error" }));
-          resolve('fail');
-        }
-        else if (error.code === 3) {
-          webViewRef?.current?.postMessage(JSON.stringify({ type: "Position_error" }));
-          resolve('fail');
-        }
-      }, {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 5000,
-      });
+      );
     } catch (error) {
       webViewRef?.current?.postMessage(JSON.stringify({ type: "Position_error" }));
+      resolve("fail");
     }
   });
+};
+
+/**
+ * Handles messages from WebView and triggers corresponding actions.
+ * @param {Object} event - WebView message event.
+ * @param {Object} locationRef - Ref object for location tracking.
+ * @param {Object} webViewRef - Ref to the WebView component.
+ * @param {Function} setShowCamera - Function to show camera modal.
+ * @param {Function} setIsVisible - Function to set camera visibility.
+ * @param {Object} isCameraActive - Ref object for camera active state.
+ */
+export const readWebViewMessage = async (
+  event,
+  locationRef,
+  webViewRef,
+  setShowCamera,
+  setIsVisible,
+  isCameraActive
+) => {
+  let msg;
+  try {
+    const data = event?.nativeEvent?.data;
+
+    // Handle both string and object messages
+    if (typeof data === "string") {
+      try {
+        msg = JSON.parse(data);
+      } catch {
+        msg = { type: data };
+      }
+    } else if (typeof data === "object" && data !== null) {
+      msg = data;
+    } else {
+      console.log("Unknown message format:", data);
+      return;
+    }
+
+    console.log("Message from WebView:", msg);
+
+    switch (msg?.type) {
+      case "Check_Version": {
+        const version = await DeviceInfo.getVersion();
+        const required = msg?.requiredVersion?.toString()?.trim();
+        const current = version?.toString()?.trim();
+        webViewRef.current?.postMessage(
+          JSON.stringify({
+            type: required === current ? "Version_Not_Expired" : "Version_Expired",
+          })
+        );
+        break;
+      }
+
+      case "track_location":
+        startLocationTracking(locationRef, webViewRef);
+        break;
+
+      case "open_Camera": {
+        const isLocationEnabled = await DeviceInfo.isLocationEnabled();
+        if (isLocationEnabled) {
+          isCameraActive.current = true;
+          setShowCamera(true);
+          setIsVisible(true);
+        } else {
+          webViewRef.current?.postMessage(JSON.stringify({ type: "Location_Disabled" }));
+          isCameraActive.current = false;
+        }
+        break;
+      }
+
+      case "Stop_location":
+      case "stopTracking":
+        stopTracking(locationRef);
+        break;
+
+      case "Exit_App":
+        handleExit(locationRef);
+        break;
+
+      case "errorMessage":
+      case "info":
+        // No action needed
+        break;
+
+      default:
+        console.log("Unhandled message type:", msg?.type);
+        break;
+    }
+  } catch (err) {
+    console.error("Error in readWebViewMessage:", err);
+    webViewRef?.current?.postMessage(JSON.stringify({ type: "Message_Error" }));
+  }
+};
+
+/**
+ * Clears app cache and temp files.
+ * @returns {Promise<boolean>} True if successful, false otherwise.
+ */
+export const appCacheClear = async () => {
+  try {
+    const tempDirectoryPath = RNFS.TemporaryDirectoryPath;
+    const cacheDirectoryPath = RNFS.CachesDirectoryPath;
+
+    await deleteFolderContents(tempDirectoryPath);
+    await deleteFolderContents(cacheDirectoryPath);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+/**
+ * Deletes all contents of a folder.
+ * @param {string} folderPath - Path to the folder.
+ */
+const deleteFolderContents = async (folderPath) => {
+  try {
+    const items = await RNFS.readDir(folderPath);
+    for (const item of items) {
+      await RNFS.unlink(item.path);
+    }
+  } catch (error) {
+    // Optionally log error
+  }
+};
+
+/**
+ * Handles app exit by stopping location tracking and exiting the app.
+ * @param {Object} locationRef - Ref object for location tracking.
+ */
+const handleExit = (locationRef) => {
+  stopTracking(locationRef);
+  BackHandler.exitApp();
 };
