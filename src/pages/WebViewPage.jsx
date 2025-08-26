@@ -136,7 +136,7 @@ const WebViewPage = () => {
             key={webKey}
             ref={webViewRef}
             onMessage={handleWebViewMessage}
-            source={{ uri: "https://marking-app-5557a.web.app" }}
+            source={{ uri: "https://entity-marking.web.app/" }}
             style={{ flex: 1, minHeight: "100%" }}
             geolocationEnabled={true}
             mediaPlaybackRequiresUserAction={false}
