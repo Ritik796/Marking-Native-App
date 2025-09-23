@@ -6,7 +6,6 @@ import { cameraStyle as styles } from './CameraStyle';
 import RNFS from 'react-native-fs';
 import ImageResizer from 'react-native-image-resizer';
 import Loader from '../Loader/Loader';
-import * as webAction from '../../Action/WebViewPageAction/WebViewPageAction';
 
 const CameraComponent = ({
   isVisible,
@@ -17,8 +16,7 @@ const CameraComponent = ({
   setShowCamera,
   setIsVisible,
   setLoader,
-  loader,
-  locationRef
+  loader
 }) => {
   const cameraRef = useRef(null);
   const lastSent = useRef(0);
@@ -26,26 +24,9 @@ const CameraComponent = ({
   const [cameraOpen, setCameraOpen] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
   const [isLayoutReady, setIsLayoutReady] = useState(false);
-  const [cameraData, setCameraData] = useState({ photoUri: "", resizedUri: "" });
+  const [cameraData, setCameraData] = useState({ photoUri: "", resizedUri: "", thumbnailUri: "" });
 
   const device = useCameraDevice('back');
-
-  // Manage location tracking when camera modal opens/closes
-  useEffect(() => {
-    const manageLocationTracking = async () => {
-      if (isVisible) {
-        await webAction.stopTracking(locationRef);
-        setTimeout(() => setCameraOpen(true), 500);
-      }
-    };
-
-    manageLocationTracking();
-
-    return async () => {
-      await webAction.startLocationTracking(locationRef, webViewRef);
-      setCameraOpen(false);
-    };
-  }, [isVisible, locationRef, webViewRef]);
 
   // Delete a file if it exists
   const deleteFile = async (filePath) => {
@@ -57,26 +38,95 @@ const CameraComponent = ({
     }
   };
 
-  // Capture and resize image, then set preview
-  const captureImage = useCallback(async () => {
-    if (!cameraRef.current) return;
-    setLoader(true);
-    try {
-      const photo = await cameraRef.current.takePhoto({ qualityPrioritization: 'balanced' });
-      const resizedImage = await ImageResizer.createResizedImage(
-        photo.path, 800, 800, 'JPEG', 100, 0
-      );
-      const base64Data = await RNFS.readFile(resizedImage.uri, 'base64');
-      const formattedBase64 = `data:image/jpeg;base64,${base64Data}`;
-      setCameraData({ photoUri: photo.path, resizedUri: resizedImage.uri });
-      setBase64Image(formattedBase64);
-      setCameraOpen(false);
-      setShowPreview(true);
-    } catch (err) {
-      // console.error('Error capturing or resizing image:', err);
-    }
-    setLoader(false);
-  }, [setBase64Image, setLoader]);
+const captureImage = useCallback(async () => {
+  if (!cameraRef.current) return;
+  setLoader(true);
+
+  try {
+    const photo = await cameraRef.current.takePhoto({
+      qualityPrioritization: "speed",
+      quality: 0.8,
+    });
+
+    // Helper function for compressing with size check
+    const compressUntilLimit = async (path, maxW, maxH, maxKB, startQuality = 85) => {
+      let quality = startQuality;
+      let image = null;
+      let stats = null;
+
+      do {
+        image = await ImageResizer.createResizedImage(
+          path,
+          maxW,
+          maxH,
+          "JPEG",
+          quality,
+          0,
+          undefined,
+          false,
+          { mode: "cover", onlyScaleDown: true, format: "JPEG" }
+        );
+        stats = await RNFS.stat(image.uri);
+
+        console.log(`👉 Trying quality ${quality}, got size ${(stats.size / 1024).toFixed(2)} KB`);
+
+        quality -= 10; // reduce quality step by step
+        if (quality < 30) break; // stop at 30% to avoid bad quality
+      } while (stats.size > maxKB * 1024);
+
+      return { image, stats };
+    };
+
+    // Compress main image (max 50KB)
+    const { image: resizedImage, stats: resizedStats } = await compressUntilLimit(
+      photo.path,
+      800,
+      800,
+      50,
+      85
+    );
+
+    // Compress thumbnail (max 15KB)
+    const { image: thumbnailImage, stats: thumbStats } = await compressUntilLimit(
+      photo.path,
+      180,
+      180,
+      15,
+      85
+    );
+
+    // ---- Read Base64 ----
+    const base64Data = await RNFS.readFile(resizedImage.uri, "base64");
+    const formattedBase64 = `data:image/jpeg;base64,${base64Data}`;
+
+    const thumbBase64Data = await RNFS.readFile(thumbnailImage.uri, "base64");
+    const thumbBase64DataFormatted = `data:image/jpeg;base64,${thumbBase64Data}`;
+
+    console.log("✅ Final Sizes:");
+    console.log("Main:", (resizedStats.size / 1024).toFixed(2), "KB");
+    console.log("Thumb:", (thumbStats.size / 1024).toFixed(2), "KB");
+
+    // ---- Update State ----
+    setCameraData({
+      photoUri: photo.path,
+      resizedUri: resizedImage.uri,
+      thumbnailUri: thumbnailImage.uri,
+    });
+    setBase64Image((pre) => ({
+      ...pre,
+      actualImg: formattedBase64,
+      thumbnailImg: thumbBase64DataFormatted,
+    }));
+    setCameraOpen(false);
+    setShowPreview(true);
+  } catch (err) {
+    console.error("Error capturing or resizing image:", err);
+  }
+
+  setLoader(false);
+}, [setBase64Image, setLoader]);
+
+
 
   // Confirm photo, send to WebView, clean up files
   const confirmPhoto = async () => {
@@ -85,12 +135,13 @@ const CameraComponent = ({
       const now = Date.now();
       if (base64Image && now - lastSent.current > 3000) {
         lastSent.current = now;
-        webViewRef.current?.postMessage(JSON.stringify({ image: base64Image }));
+        webViewRef.current?.postMessage(JSON.stringify({ image: base64Image.actualImg, thumbnailImage: base64Image.thumbnailImg }));
       }
       if (cameraData.photoUri) await deleteFile(cameraData.photoUri);
       if (cameraData.resizedUri) await deleteFile(cameraData.resizedUri);
-      setBase64Image(null);
-      setCameraData({ photoUri: null, resizedUri: null });
+      if (cameraData.thumbnailUri) await deleteFile(cameraData.thumbnailUri);
+      setBase64Image(pre => ({ ...pre, actualImg: "", thumbnailImg: "" }));
+      setCameraData({ photoUri: null, resizedUri: null, thumbnailUri: null });
     } catch (error) {
       // console.log('Error during photo confirmation or cleanup:', error);
     }
@@ -128,8 +179,8 @@ const CameraComponent = ({
               onLayout={() => setIsLayoutReady(true)}
             >
               {showPreview ? (
-                <Image
-                  source={{ uri: base64Image }}
+                 <Image
+                  source={{ uri: base64Image.actualImg }}
                   style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
                   onLoadEnd={() => setLoader(false)}
                 />
@@ -149,7 +200,7 @@ const CameraComponent = ({
             </View>
 
             <View style={styles.footerBotttom}>
-              <TouchableOpacity style={styles.captureBtn} onPress={handleClose}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={handleClose}>
                 <Text style={styles.captureTxt}>Cancel</Text>
               </TouchableOpacity>
 

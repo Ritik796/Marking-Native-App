@@ -89,6 +89,17 @@ loaderOverlay: {
     borderColor: 'white',
     flexDirection: "row"
   },
+  cancelBtn: {
+    backgroundColor: '#dc3545',
+    width: '50%',
+    height: 70,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 5,
+    borderColor: 'white',
+    flexDirection: "row"
+  },
 
   captureTxt: {
     color: "white",

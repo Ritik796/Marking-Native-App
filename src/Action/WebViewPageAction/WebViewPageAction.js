@@ -57,7 +57,7 @@ export const requestPermissions = async () => {
  * @param {Object} webViewRef - Ref to the WebView component.
  * @returns {Function} Cleanup function to stop tracking.
  */
-export const startLocationTracking = async (locationRef, webViewRef) => {
+export const startLocationTracking = async (locationRef, webViewRef, locationFetch) => {
   const isLocationOn = await DeviceInfo.isLocationEnabled().catch((err) => {
     console.error("Error checking GPS status:", err);
     return false;
@@ -71,11 +71,23 @@ export const startLocationTracking = async (locationRef, webViewRef) => {
   const watchId = Geolocation.watchPosition(
     (position) => {
       const { latitude, longitude, accuracy } = position.coords;
-      if (accuracy != null && accuracy <= 15) {
+      console.log(`Location update: ${latitude}, ${longitude} (Accuracy: ${accuracy}m)`);
+      if (accuracy != null && accuracy <= 20) {
         webViewRef?.current?.postMessage(JSON.stringify({
           type: "location_update",
           location: { lat: latitude, lng: longitude }
         }));
+        if (locationFetch.current === false) {
+          console.log({
+            type: "LocationFetch",
+            isFetchLocation: true
+          });
+          webViewRef?.current?.postMessage(JSON.stringify({
+            type: "LocationFetch",
+            isFetchLocation: true
+          }));
+        }
+        locationFetch.current = true;
       }
     },
     (error) => {
@@ -90,7 +102,15 @@ export const startLocationTracking = async (locationRef, webViewRef) => {
       maximumAge: 0,
     }
   );
-
+  setTimeout(() => {
+    if (locationFetch.current === false) {
+      console.log("No location fetched within 15 sec. Sending refetch message...");
+      webViewRef?.current?.postMessage(JSON.stringify({
+        type: "LocationRefetch",
+        isFetchLocation: false
+      }));
+    }
+  }, 20000);
   locationRef.current = watchId;
 
   // Cleanup function to stop tracking
@@ -106,10 +126,12 @@ export const startLocationTracking = async (locationRef, webViewRef) => {
  * Stops location tracking.
  * @param {Object} locationRef - Ref object containing watchId.
  */
-export const stopTracking = async (locationRef) => {
+export const stopTracking = async (locationRef, locationFetch) => {
   if (locationRef?.current) {
     await Geolocation.clearWatch(locationRef.current);
+    console.log("Location tracking stopped.");
     locationRef.current = null;
+    locationFetch.current = false;
   }
 };
 
@@ -167,7 +189,8 @@ export const readWebViewMessage = async (
   webViewRef,
   setShowCamera,
   setIsVisible,
-  isCameraActive
+  isCameraActive,
+  locationFetch
 ) => {
   let msg;
   try {
@@ -187,7 +210,6 @@ export const readWebViewMessage = async (
       return;
     }
 
-    console.log("Message from WebView:", msg);
 
     switch (msg?.type) {
       case "Check_Version": {
@@ -203,7 +225,7 @@ export const readWebViewMessage = async (
       }
 
       case "track_location":
-        startLocationTracking(locationRef, webViewRef);
+        startLocationTracking(locationRef, webViewRef, locationFetch);
         break;
 
       case "open_Camera": {
@@ -221,20 +243,23 @@ export const readWebViewMessage = async (
 
       case "Stop_location":
       case "stopTracking":
-        stopTracking(locationRef);
+        stopTracking(locationRef, locationFetch);
         break;
 
       case "Exit_App":
-        handleExit(locationRef);
+        handleExit(locationRef, locationFetch);
         break;
-
+      case "Get_Location":
+        getCurrentLocation(locationRef, webViewRef, locationFetch);
+        break;
       case "errorMessage":
       case "info":
         // No action needed
+        console.log(msg.data)
         break;
 
       default:
-        console.log("Unhandled message type:", msg?.type);
+
         break;
     }
   } catch (err) {
@@ -243,6 +268,12 @@ export const readWebViewMessage = async (
   }
 };
 
+const getCurrentLocation = (locationRef, webViewRef, locationFetch) => {
+  stopTracking(locationRef, locationFetch);
+  setTimeout(() => {
+    startLocationTracking(locationRef, webViewRef, locationFetch);
+  }, 2000);
+};
 /**
  * Clears app cache and temp files.
  * @returns {Promise<boolean>} True if successful, false otherwise.
@@ -279,7 +310,7 @@ const deleteFolderContents = async (folderPath) => {
  * Handles app exit by stopping location tracking and exiting the app.
  * @param {Object} locationRef - Ref object for location tracking.
  */
-const handleExit = (locationRef) => {
-  stopTracking(locationRef);
+const handleExit = (locationRef, locationFetch) => {
+  stopTracking(locationRef, locationFetch);
   BackHandler.exitApp();
 };

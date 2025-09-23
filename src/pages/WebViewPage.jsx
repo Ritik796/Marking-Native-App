@@ -19,11 +19,12 @@ const WebViewPage = () => {
   const webViewRef = useRef(null);
   const locationRef = useRef(null);
   const isCameraActive = useRef(null);
+  const locationFetch = useRef(true);
 
   const [loading, setLoading] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
-  const [base64Image, setBase64Image] = useState("");
+  const [base64Image, setBase64Image] = useState({actualImg:"",thumbnailImg:""});
   const [loader, setLoader] = useState(false);
   const [webKey, setWebKey] = useState(0);
 
@@ -94,7 +95,8 @@ const WebViewPage = () => {
       webViewRef,
       setShowCamera,
       setIsVisible,
-      isCameraActive
+      isCameraActive,
+      locationFetch
     );
   };
 
@@ -121,7 +123,6 @@ const WebViewPage = () => {
             setShowCamera={setShowCamera}
             webViewRef={webViewRef}
             base64Image={base64Image}
-            locationRef={locationRef}
           />
         )}
 
@@ -136,7 +137,7 @@ const WebViewPage = () => {
             key={webKey}
             ref={webViewRef}
             onMessage={handleWebViewMessage}
-            source={{ uri: "https://entity-marking.web.app/" }}
+            source={{ uri: "https://marking-test-c61f5.web.app" }}
             style={{ flex: 1, minHeight: "100%" }}
             geolocationEnabled={true}
             mediaPlaybackRequiresUserAction={false}
