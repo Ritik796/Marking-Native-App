@@ -3,7 +3,7 @@
  * Utility functions for permissions, location tracking, WebView messaging, and cache management.
  */
 
-import { BackHandler, PermissionsAndroid, Platform } from "react-native";
+import { BackHandler, Linking, PermissionsAndroid, Platform } from "react-native";
 import Geolocation from "@react-native-community/geolocation";
 import DeviceInfo from "react-native-device-info";
 import * as RNFS from 'react-native-fs';
@@ -57,7 +57,7 @@ export const requestPermissions = async () => {
  * @param {Object} webViewRef - Ref to the WebView component.
  * @returns {Function} Cleanup function to stop tracking.
  */
-export const startLocationTracking = async (locationRef, webViewRef, locationFetch) => {
+export const startLocationTracking = async (locationRef, webViewRef) => {
   const isLocationOn = await DeviceInfo.isLocationEnabled().catch((err) => {
     console.error("Error checking GPS status:", err);
     return false;
@@ -77,17 +77,6 @@ export const startLocationTracking = async (locationRef, webViewRef, locationFet
           type: "location_update",
           location: { lat: latitude, lng: longitude }
         }));
-        if (locationFetch.current === false) {
-          console.log({
-            type: "LocationFetch",
-            isFetchLocation: true
-          });
-          webViewRef?.current?.postMessage(JSON.stringify({
-            type: "LocationFetch",
-            isFetchLocation: true
-          }));
-        }
-        locationFetch.current = true;
       }
     },
     (error) => {
@@ -102,15 +91,6 @@ export const startLocationTracking = async (locationRef, webViewRef, locationFet
       maximumAge: 0,
     }
   );
-  setTimeout(() => {
-    if (locationFetch.current === false) {
-      console.log("No location fetched within 15 sec. Sending refetch message...");
-      webViewRef?.current?.postMessage(JSON.stringify({
-        type: "LocationRefetch",
-        isFetchLocation: false
-      }));
-    }
-  }, 20000);
   locationRef.current = watchId;
 
   // Cleanup function to stop tracking
@@ -126,12 +106,11 @@ export const startLocationTracking = async (locationRef, webViewRef, locationFet
  * Stops location tracking.
  * @param {Object} locationRef - Ref object containing watchId.
  */
-export const stopTracking = async (locationRef, locationFetch) => {
+export const stopTracking = async (locationRef) => {
   if (locationRef?.current) {
     await Geolocation.clearWatch(locationRef.current);
     console.log("Location tracking stopped.");
     locationRef.current = null;
-    locationFetch.current = false;
   }
 };
 
@@ -190,7 +169,6 @@ export const readWebViewMessage = async (
   setShowCamera,
   setIsVisible,
   isCameraActive,
-  locationFetch
 ) => {
   let msg;
   try {
@@ -210,7 +188,6 @@ export const readWebViewMessage = async (
       return;
     }
 
-
     switch (msg?.type) {
       case "Check_Version": {
         const version = await DeviceInfo.getVersion();
@@ -225,9 +202,14 @@ export const readWebViewMessage = async (
       }
 
       case "track_location":
-        startLocationTracking(locationRef, webViewRef, locationFetch);
+        startLocationTracking(locationRef, webViewRef);
         break;
-
+      case "OPEN_GOOGLE_MAP":
+        console.log('data.url', msg.url);
+        if (msg.url) {
+          Linking.openURL(msg.url);    // ✅ Opens Google Maps App / Browser
+        }
+        break;
       case "open_Camera": {
         const isLocationEnabled = await DeviceInfo.isLocationEnabled();
         if (isLocationEnabled) {
@@ -243,19 +225,19 @@ export const readWebViewMessage = async (
 
       case "Stop_location":
       case "stopTracking":
-        stopTracking(locationRef, locationFetch);
+        stopTracking(locationRef);
         break;
 
       case "Exit_App":
-        handleExit(locationRef, locationFetch);
+        handleExit(locationRef);
         break;
       case "Get_Location":
-        getCurrentLocation(locationRef, webViewRef, locationFetch);
+        getCurrentLocation(locationRef, webViewRef);
         break;
       case "errorMessage":
       case "info":
         // No action needed
-        console.log(msg.data)
+        console.log(msg.data);
         break;
 
       default:
@@ -268,10 +250,10 @@ export const readWebViewMessage = async (
   }
 };
 
-const getCurrentLocation = (locationRef, webViewRef, locationFetch) => {
-  stopTracking(locationRef, locationFetch);
+const getCurrentLocation = (locationRef, webViewRef) => {
+  stopTracking(locationRef);
   setTimeout(() => {
-    startLocationTracking(locationRef, webViewRef, locationFetch);
+    startLocationTracking(locationRef, webViewRef);
   }, 2000);
 };
 /**
@@ -310,7 +292,7 @@ const deleteFolderContents = async (folderPath) => {
  * Handles app exit by stopping location tracking and exiting the app.
  * @param {Object} locationRef - Ref object for location tracking.
  */
-const handleExit = (locationRef, locationFetch) => {
-  stopTracking(locationRef, locationFetch);
+const handleExit = (locationRef) => {
+  stopTracking(locationRef);
   BackHandler.exitApp();
 };

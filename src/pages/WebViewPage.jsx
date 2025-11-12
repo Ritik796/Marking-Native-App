@@ -19,15 +19,15 @@ const WebViewPage = () => {
   const webViewRef = useRef(null);
   const locationRef = useRef(null);
   const isCameraActive = useRef(null);
-  const locationFetch = useRef(true);
 
   const [loading, setLoading] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
-  const [base64Image, setBase64Image] = useState({actualImg:"",thumbnailImg:""});
+  const [base64Image, setBase64Image] = useState({ actualImg: "", thumbnailImg: "" });
   const [loader, setLoader] = useState(false);
   const [webKey, setWebKey] = useState(0);
-
+  const WEB_URL = `https://interview-8f792.web.app`;
+  // const WEB_URL = `http://192.168.29.181:3001"`
   // Request permissions and subscribe to app state changes
   useEffect(() => {
     action.requestPermissions();
@@ -96,7 +96,6 @@ const WebViewPage = () => {
       setShowCamera,
       setIsVisible,
       isCameraActive,
-      locationFetch
     );
   };
 
@@ -123,6 +122,7 @@ const WebViewPage = () => {
             setShowCamera={setShowCamera}
             webViewRef={webViewRef}
             base64Image={base64Image}
+            locationRef={locationRef}
           />
         )}
 
@@ -137,7 +137,7 @@ const WebViewPage = () => {
             key={webKey}
             ref={webViewRef}
             onMessage={handleWebViewMessage}
-            source={{ uri: "https://marking-test-c61f5.web.app" }}
+            source={{ uri: WEB_URL }}
             style={{ flex: 1, minHeight: "100%" }}
             geolocationEnabled={true}
             mediaPlaybackRequiresUserAction={false}
@@ -145,6 +145,7 @@ const WebViewPage = () => {
             domStorageEnabled={true}
             setBuiltInZoomControls={false}
             setDisplayZoomControls={false}
+            setSupportMultipleWindows={true}
             onLoadEnd={handleStopLoading}
           />
         </KeyboardAvoidingView>
