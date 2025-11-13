@@ -77,7 +77,7 @@ const WebViewPage = () => {
           if (!isTrackingRef.current) {
             isTrackingRef.current = true;
             if (webAccRef.current) {
-              action.startLocationTracking(locationRef, webViewRef, webAccRef.current);
+              action.startLocationTracking(locationRef, webViewRef, webAccRef);
 
               console.log("🔥 Location Tracking Started");
             }
