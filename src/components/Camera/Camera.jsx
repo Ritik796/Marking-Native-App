@@ -16,7 +16,7 @@ const CameraComponent = ({
   setShowCamera,
   setIsVisible,
   setLoader,
-  loader, locationRef,
+  loader, locationRef, webAccRef
 }) => {
   const cameraRef = useRef(null);
   const lastSent = useRef(0);
@@ -48,10 +48,7 @@ const CameraComponent = ({
       const resumeTracking = async () => {
         console.log("▶️ Resuming location tracking");
 
-        await webAction.startLocationTracking(locationRef, webViewRef);
-
-        // If your startLocationTracking has separate method for webview, call the correct one
-        await webAction.startLocationTracking(locationRef, webViewRef);
+        await webAction.startLocationTracking(locationRef, webViewRef, webAccRef);
 
         setCameraOpen(false);
       };

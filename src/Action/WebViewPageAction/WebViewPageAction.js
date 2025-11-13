@@ -57,7 +57,7 @@ export const requestPermissions = async () => {
  * @param {Object} webViewRef - Ref to the WebView component.
  * @returns {Function} Cleanup function to stop tracking.
  */
-export const startLocationTracking = async (locationRef, webViewRef) => {
+export const startLocationTracking = async (locationRef, webViewRef, webAccRef) => {
   const isLocationOn = await DeviceInfo.isLocationEnabled().catch((err) => {
     console.error("Error checking GPS status:", err);
     return false;
@@ -67,33 +67,33 @@ export const startLocationTracking = async (locationRef, webViewRef) => {
     webViewRef.current?.postMessage(JSON.stringify({ type: "Location_Disabled" }));
     return;
   }
+
   console.log("Starting location tracking...");
   const watchId = Geolocation.watchPosition(
     (position) => {
       const { latitude, longitude, accuracy } = position.coords;
       console.log(`Location update: ${latitude}, ${longitude} (Accuracy: ${accuracy}m)`);
-      if (accuracy != null && accuracy <= 20) {
-        webViewRef?.current?.postMessage(JSON.stringify({
+
+      // 🔥 Always use the UPDATED accuracy value
+      if (accuracy != null && accuracy <= webAccRef.current) {
+        webViewRef.current?.postMessage(JSON.stringify({
           type: "location_update",
           location: { lat: latitude, lng: longitude }
         }));
       }
     },
-    (error) => {
-      // Optionally handle geolocation errors here
-    },
+    (error) => { },
     {
       enableHighAccuracy: true,
-      distanceFilter: 10,      // Trigger every ~10 meter
-      interval: 10000,         // Regular update every 10s
-      fastestInterval: 6000,   // Minimum interval for updates
-      useSignificantChanges: false,
+      distanceFilter: 10,
+      interval: 10000,
+      fastestInterval: 6000,
       maximumAge: 0,
     }
   );
+
   locationRef.current = watchId;
 
-  // Cleanup function to stop tracking
   return () => {
     if (locationRef.current != null) {
       Geolocation.clearWatch(locationRef.current);
@@ -102,14 +102,15 @@ export const startLocationTracking = async (locationRef, webViewRef) => {
   };
 };
 
+
 /**
  * Stops location tracking.
  * @param {Object} locationRef - Ref object containing watchId.
  */
 export const stopTracking = async (locationRef) => {
   if (locationRef?.current) {
+    console.log("Location tracking stopped.", locationRef.current);
     await Geolocation.clearWatch(locationRef.current);
-    console.log("Location tracking stopped.");
     locationRef.current = null;
   }
 };
@@ -169,11 +170,11 @@ export const readWebViewMessage = async (
   setShowCamera,
   setIsVisible,
   isCameraActive,
+  webAccRef
 ) => {
   let msg;
   try {
     const data = event?.nativeEvent?.data;
-
     // Handle both string and object messages
     if (typeof data === "string") {
       try {
@@ -187,7 +188,6 @@ export const readWebViewMessage = async (
       console.log("Unknown message format:", data);
       return;
     }
-
     switch (msg?.type) {
       case "Check_Version": {
         const version = await DeviceInfo.getVersion();
@@ -202,10 +202,16 @@ export const readWebViewMessage = async (
       }
 
       case "track_location":
-        startLocationTracking(locationRef, webViewRef);
+        webAccRef.current = msg?.accuracy || 20;
+
+        // Stop previous GPS listener before adding new
+        await stopTracking(locationRef);
+
+        startLocationTracking(locationRef, webViewRef, webAccRef);
         break;
+
+
       case "OPEN_GOOGLE_MAP":
-        console.log('data.url', msg.url);
         if (msg.url) {
           Linking.openURL(msg.url);    // ✅ Opens Google Maps App / Browser
         }
@@ -234,10 +240,12 @@ export const readWebViewMessage = async (
       case "Get_Location":
         getCurrentLocation(locationRef, webViewRef);
         break;
+
+      case "resetAccuracy":
+        webAccRef.current = 0;
       case "errorMessage":
       case "info":
-        // No action needed
-        console.log(msg.data);
+
         break;
 
       default:
