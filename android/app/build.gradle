@@ -6,6 +6,11 @@ apply plugin: "com.facebook.react"
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
+ // 🔥 REMOVE ML KIT TRANSLATE (60MB saved)
+configurations.all {
+    exclude group: "com.google.mlkit", module: "translate"
+    exclude group: "com.google.android.gms", module: "play-services-mlkit-translate"
+}
 react {
     /* Folders */
     //   The root of your project, i.e. where "package.json" lives. Default is '../..'
@@ -78,24 +83,22 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.marking_react_app"
-    defaultConfig {
-        applicationId "com.marking_react_app"
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0.6"
-          ndk {
-            abiFilters "armeabi-v7a", "arm64-v8a"
-        }
-         splits {
-        abi {
-            reset()
-            enable true
-            universalApk true
-            include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
-        }
+  defaultConfig {
+    applicationId "com.marking_react_app"
+    minSdkVersion rootProject.ext.minSdkVersion
+    targetSdkVersion rootProject.ext.targetSdkVersion
+    versionCode 1
+    versionName "1.0.0.7"
+
+    // ✅ Vision Camera optimization
+    resValue "bool", "visioncamera_enable_frame_processors", "false"
+
+    // ✅ Only real phone ABIs
+    ndk {
+        abiFilters "armeabi-v7a", "arm64-v8a"
     }
-    }
+}
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -121,6 +124,7 @@ android {
             // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }

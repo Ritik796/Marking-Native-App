@@ -34,7 +34,7 @@ const WebViewPage = () => {
   const webAccRef = useRef(0);
   const isTrackingRef = useRef(false);
 
-  const WEB_URL = `https://entity-marking.web.app/`;
+const WEB_URL = `https://entity-markings-ea3ff.web.app`;
 
   // ✅ Setup device permission and app state listener
   useEffect(() => {
