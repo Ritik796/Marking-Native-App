@@ -170,7 +170,8 @@ export const readWebViewMessage = async (
   setShowCamera,
   setIsVisible,
   isCameraActive,
-  webAccRef
+  webAccRef,
+  appLoadingRef
 ) => {
   let msg;
   try {
@@ -216,6 +217,12 @@ export const readWebViewMessage = async (
           Linking.openURL(msg.url);    // ✅ Opens Google Maps App / Browser
         }
         break;
+      case "StartAppLoading":
+        if (appLoadingRef) appLoadingRef.current = true;
+        break;
+      case "StopAppLoading":
+        if (appLoadingRef) appLoadingRef.current = false;
+        break;
       case "open_Camera": {
         const isLocationEnabled = await DeviceInfo.isLocationEnabled();
         if (isLocationEnabled) {
@@ -243,6 +250,7 @@ export const readWebViewMessage = async (
 
       case "resetAccuracy":
         webAccRef.current = 0;
+        break;
       case "errorMessage":
       case "info":
 
@@ -261,7 +269,7 @@ export const readWebViewMessage = async (
 const getCurrentLocation = (locationRef, webViewRef) => {
   stopTracking(locationRef);
   setTimeout(() => {
-    startLocationTracking(locationRef, webViewRef);
+    startLocationTracking(locationRef, webViewRef, { current: 20 });
   }, 2000);
 };
 /**

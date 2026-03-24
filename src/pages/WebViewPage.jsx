@@ -33,7 +33,9 @@ const WebViewPage = () => {
   const { ConnectivityModule } = NativeModules;
   const webAccRef = useRef(0);
   const isTrackingRef = useRef(false);
+  const appLoadingRef = useRef(false);
 
+// const WEB_URL = `https://marking-test-c61f5.web.app`;
 const WEB_URL = `https://wevois-marking.web.app`;
 
   // ✅ Setup device permission and app state listener
@@ -131,31 +133,29 @@ const WEB_URL = `https://wevois-marking.web.app`;
   };
 
   const handleAppStateChange = async (nextAppState) => {
+    const wasCameraActive = isCameraActive.current;
     isCameraActive.current = false;
 
     if (appState.current.match(/inactive|background/) && nextAppState === "active") {
-      if (!isCameraActive.current) {
+      if (!wasCameraActive) {
         startConnectivityListener(ConnectivityModule);
-        setLoading(true);
-        await cleanupAppCache();
-        setWebKey((prevKey) => prevKey + 1);
+        if (appLoadingRef.current === true) {
+          setLoading(true);
+          setWebKey((prevKey) => prevKey + 1);
+        }
         setShowCamera(false);
         setIsVisible(false);
       }
     }
 
     if (nextAppState.match(/inactive|background/)) {
+      isTrackingRef.current = false;
       action.stopTracking(locationRef);
       stopConnectivityListener(ConnectivityModule);
     }
 
     appState.current = nextAppState;
   };
-
-  const cleanupAppCache = async () => {
-    await action.appCacheClear();
-  };
-
   const handleWebViewMessage = (event) => {
     action.readWebViewMessage(
       event,
@@ -164,7 +164,8 @@ const WEB_URL = `https://wevois-marking.web.app`;
       setShowCamera,
       setIsVisible,
       isCameraActive,
-      webAccRef
+      webAccRef,
+      appLoadingRef
     );
   };
   const handleRetry = () => {
@@ -211,7 +212,6 @@ const WEB_URL = `https://wevois-marking.web.app`;
             setBuiltInZoomControls={false}
             setDisplayZoomControls={false}
             onError={() => setNetWorkError(true)}
-            originWhitelist={["*"]}
             onLoadEnd={handleStopLoading} // ✅ Mark WebView as ready here
           />
         </KeyboardAvoidingView>
