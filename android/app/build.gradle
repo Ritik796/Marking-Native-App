@@ -88,7 +88,7 @@ android {
     minSdkVersion rootProject.ext.minSdkVersion
     targetSdkVersion rootProject.ext.targetSdkVersion
     versionCode 1
-    versionName "1.0.0.8"
+    versionName "1.0.0.9"
 
     // ✅ Vision Camera optimization
     resValue "bool", "visioncamera_enable_frame_processors", "false"

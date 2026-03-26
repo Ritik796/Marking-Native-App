@@ -35,8 +35,8 @@ const WebViewPage = () => {
   const isTrackingRef = useRef(false);
   const appLoadingRef = useRef(false);
 
-// const WEB_URL = `https://marking-test-c61f5.web.app`;
-const WEB_URL = `https://wevois-marking.web.app`;
+// const WEB_URL = `https://marking-test-c61f5.web.app`; // testing
+const WEB_URL = ` https://entity-markings-ea3ff.web.app`; // production
 
   // ✅ Setup device permission and app state listener
   useEffect(() => {
